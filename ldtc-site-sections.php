@@ -376,6 +376,7 @@ add_action('add_attachment', 'add_category_automatically');
 function set_parent_terms_siteSections( $post_id, $post ) {
 
     if ( $post->post_parent > 0 ) {
+        $ancs = get_post_ancestors( $post_id );
         if(!empty($ancs)){
             foreach ( $ancs as $anc ) {
                 $terms = wp_get_post_terms( $anc, 'siteSection' );
