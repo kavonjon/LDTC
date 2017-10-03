@@ -60,6 +60,11 @@ add_action( 'init', 'wptp_register_siteSection_tax', 0 );
 
 function restricted_site_sections_metabox( $post, $box ) {
 	if (!current_user_can('level_10')) { // check for user capabilities - level_10 is admin
+        
+        if( !current_user_can('editor')) { // for non-administrator, only show checklist of terms for users with at least editor role
+            return;
+        }
+
 		//get the terms that the user is assigned to 
 		$user = wp_get_current_user();
 		$assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );
@@ -104,12 +109,10 @@ function restricted_site_sections_metabox( $post, $box ) {
                  * Notice that "checked_ontop" is now set to FALSE
                  */
                 if (!current_user_can('level_10')) { // check for user capabilities - level_10 is admin
-                    if( current_user_can('editor')) { // for non-administrator, only show checklist of terms for users with at least editor role
                         // use wp_terms_checklist once for each term that the user is assigned to, with 'descendants_and_self' argument to limit the output to that term
                         foreach( $assigned_term_ids as $available_term ) {
                             wp_terms_checklist($post->ID, array( 'taxonomy' => $taxonomy, 'descendants_and_self' => $available_term, 'checked_ontop' => FALSE ) );
                         }
-                    }
                 } else {
                     wp_terms_checklist($post->ID, array( 'taxonomy' => $taxonomy, 'popular_cats' => $popular_ids, 'checked_ontop' => FALSE ) );
                 } ?>
@@ -206,6 +209,9 @@ function show_user_siteSection( $user ) {
 add_action( 'personal_options_update', 'save_user_siteSection' );
 add_action( 'edit_user_profile_update', 'save_user_siteSection' );
 function save_user_siteSection( $user_id ) {
+
+    if ( !current_user_can('level_10') )
+        return;
 
 	$user_terms = $_POST['siteSection'];
 	$terms = array_unique( array_map( 'intval', $user_terms ) );
@@ -320,7 +326,8 @@ function edit_filter_get_posts($query) {
             'taxonomy' => 'siteSection',
             'field' => 'slug',
             'terms' => $assigned_term_slugs,
-            'operator'=> 'IN'
+            'operator'=> 'IN',
+            'include_children' => false
         )
     );
 
@@ -367,79 +374,19 @@ add_action('add_attachment', 'add_category_automatically');
  * https://wordpress.stackexchange.com/questions/24582/how-can-i-get-only-parent-terms
  */
 function set_parent_terms_siteSections( $post_id, $post ) {
-    $languages_term = get_term_by( 'slug', 'languages', 'siteSection' );
-    $languages_term_id = $languages_term->term_id;
-    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' ); //output is ID's
 
-    $page_terms = wp_get_object_terms( $post_id, 'siteSection' );
-    $page_term_IDs = array();
-    foreach( $page_terms as $page_term ) {
-        $page_term_IDs[] = $page_term->term_id;
-    }
-
-    $page_terms_IDs_sublang = array_intersect( $page_term_IDs, $languages_child_terms );
-
-    $parent_post_ID = wp_get_post_parent_id( $post_id );
-    $parent_post = get_post( $parent_post_ID );
-    $parent_slug = $parent_post->post_name;
-
-    $ancs = get_post_ancestors( $post_id );
-    $anc_slugs = array();
-    foreach ( $ancs as $anc ) {
-        $anc_post = get_post($anc); 
-        $anc_slugs[] = $anc_post->post_name;
-    }
-    if ( in_array( 'languages', $anc_slugs ) ) {
-        if ( $parent_slug != 'languages' ) {
-            if ( $page_terms_IDs_sublang != [] ) {
-                $args = array(
-                    'numberposts' => -1,
-                    'post_parent' => $parent_post_ID,
-                );
-
-                $siblings = get_children( $args ); //this should be changed to get all descendants
-                $sibling_IDs = array();
-                foreach( $siblings as $sibling ) {
-                    $sibling_IDs[] = $sibling->ID;
-                }
-                $siblings_terms_IDs = array();
-                foreach( $sibling_IDs as $sibling_ID ) {
-                    $sibling_terms = wp_get_object_terms( $sibling_ID, 'siteSection' );
-                    $sibling_term_IDs = array();
-                    foreach( $sibling_terms as $sibling_term ) {
-                        $sibling_term_IDs[] = $sibling_term->term_id;
-                    }
-                    $siblings_terms_IDs = array_merge( $siblings_terms_IDs, $sibling_term_IDs ) ; //output is ID's
-                    $siblings_terms_IDs = array_unique( $siblings_terms_IDs );
-                }
-
-                $siblings_terms_IDs_sublang = array_intersect( $siblings_terms_IDs, $languages_child_terms );
-
-                $tmp = wp_remove_object_terms( $parent_post_ID, $languages_child_terms, 'siteSection' );
-                $tmp = wp_set_object_terms( $parent_post_ID, $siblings_terms_IDs_sublang, 'siteSection', true );
-            } else {
-                $dont_take_parent_terms = TRUE;
-            }
-        } else {
-            if ( $page_terms_IDs_sublang == [] ) {
-
-                $user = wp_get_current_user();
-                $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );
-                $assigned_term_ids = array();
-                foreach( $assigned_terms as $term ) {
-                    $assigned_term_ids[] = $term->term_id;
-                }
-                $user_terms_IDs_sublang = array_intersect( $assigned_term_ids, $languages_child_terms );
-                $tmp = wp_set_object_terms( $post_id, $user_terms_IDs_sublang, 'siteSection', true );
-            }
-        }
-    }
-
-    if ( $post->post_parent > 0 && !isset( $dont_take_parent_terms ) ) {
+    if ( $post->post_parent > 0 ) {
         if(!empty($ancs)){
             foreach ( $ancs as $anc ) {
                 $terms = wp_get_post_terms( $anc, 'siteSection' );
                 if ( !empty( $terms ) ) {
+
+                    $languages_term = get_term_by( 'slug', 'languages', 'siteSection' );
+                    $languages_term_id = $languages_term->term_id;
+                    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' ); //output is ID's
+
+                    $tmp = wp_remove_object_terms( $parent_post_ID, $languages_child_terms, 'siteSection' );
+
                     $termArr = array_map(create_function('$obj', 'return $obj->term_id;'), $terms);
                     $tmp = wp_set_object_terms( $post_id, $termArr, 'siteSection', true );
                 }
