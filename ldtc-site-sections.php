@@ -339,6 +339,43 @@ function edit_filter_get_posts($query) {
 add_action( 'pre_get_posts', 'edit_filter_get_posts' );
 
 
+/*
+ * kavon hooshiar, 03/07/18:
+ * restrict media that displays in the insert media popup box, 
+ * only show media tagged with site section terms that the user is also tagged with
+ * https://codex.wordpress.org/Plugin_API/Filter_Reference/ajax_query_attachments_args
+ */
+
+add_filter( 'ajax_query_attachments_args', 'show_users_sitesection_attachments' );
+
+function show_users_sitesection_attachments( $query ) {
+
+    if ( current_user_can('level_10') )
+        return;
+
+    $user_id = get_current_user_id();
+    $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' );
+    $assigned_term_slugs = array();
+    foreach( $assigned_terms as $term ) {
+        $assigned_term_slugs[] = $term->slug;
+    }
+
+    $taxquery = array(
+        array(
+            'taxonomy' => 'siteSection',
+            'field' => 'slug',
+            'terms' => $assigned_term_slugs,
+            'operator'=> 'IN',
+            'include_children' => false
+        )
+    );
+
+    $query['tax_query'] = $taxquery;
+
+    return $query;
+}
+
+
 
 /*
  * kavon hooshiar, 10/01/17:
