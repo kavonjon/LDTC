@@ -313,32 +313,33 @@ if( !function_exists( 'siteSection_post_class' ) ) {
  */
 
 function edit_filter_get_posts($query) {
-    global $pagenow;
+    global $pagenow;                           // get which page you're currently on
 
-    if ( current_user_can('level_10') )
+    if ( current_user_can('level_10') )        // check for user capabilities (level_10 is admin) - continue if user is not an admin
         return;
 
     if( !$query->is_main_query() )
         return;
 
-    if( 'edit.php' !== $pagenow && 'upload.php' !== $pagenow )
+    if( 'edit.php' !== $pagenow && 'upload.php' !== $pagenow )  // continue only if the current page is either edit.php or upload.php
         return $query;
     
-    if ( 'edit.php' == $pagenow ) {
-        $user = wp_get_current_user();
-        $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );
-        $assigned_term_slugs = array();
-        $add_language_page = FALSE;
-        foreach( $assigned_terms as $term ) {
-            $assigned_term_slugs[] = $term->slug;
-            if( $term->parent == 'languages' ) {
-                $add_language_page = TRUE;
+    if ( 'edit.php' == $pagenow ) {                                           // do this section if the current page is edit.php
+        $user = wp_get_current_user();                                        // get current user info
+        $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );    // get Site Section terms assigned to current user
+        $assigned_term_slugs = array();                                       // make empty array to be filled with Site Section term ID's assigned to the current user
+        $add_language_page = FALSE;                                           // flag to determine whether to add the languages term of Site Sections to the list
+        foreach( $assigned_terms as $term ) {                                 // for each Site Section term assigned to current user...
+            $assigned_term_slugs[] = $term->slug;                             // fill out this variable with their slugs
+            if( $term->parent == 'languages' ) {                              // if the term is a child term of the languages term...
+                $add_language_page = TRUE;                                    // flip the flag to true
             }
         }
-        if( add_language_page ) {
-            $assigned_term_slugs[] = 'languages';
+        if( add_language_page ) {                                             // if the flag was switched to true...
+            $assigned_term_slugs[] = 'languages';                             // add the languages term to the list
         }
 
+// build an appropriately structured argument to pass to the query in order to filter by the Site Sections taxonomy
         $taxquery = array(
             array(
                 'taxonomy' => 'siteSection',
@@ -349,19 +350,19 @@ function edit_filter_get_posts($query) {
             )
         );
 
-
-        if ( $query->is_admin ) {
-            $query->set( 'tax_query', $taxquery );
+// change the query to filter by the Site Sections taxonomy
+        if ( $query->is_admin ) {                                             // check if user is logged in
+            $query->set( 'tax_query', $taxquery );                            // change the query
         }
-	} else {
-        $user_id = get_current_user_id();
-        $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' );
-        $assigned_term_slugs = array();
-        foreach( $assigned_terms as $term ) {
-            $assigned_term_slugs[] = $term->slug;
+    } else {                                                                  // do this section if the current page is upload.php
+        $user_id = get_current_user_id();                                     // get current user info
+        $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' );     // get Site Section terms assigned to current user
+        $assigned_term_slugs = array();                                       // make empty array to be filled with Site Section term ID's assigned to the current user
+        foreach( $assigned_terms as $term ) {                                 // for each Site Section term assigned to current user...
+            $assigned_term_slugs[] = $term->slug;                             // fill out this variable with their slugs
         }
 
-    // build an array to define the terms of Site Sections to filter the query by
+// build an appropriately structured taxonomy argument to pass to get_posts to get media by taxonomy
         $taxquery = array(
             array(
                 'taxonomy' => 'siteSection',
@@ -372,27 +373,30 @@ function edit_filter_get_posts($query) {
             )
         );
 
+// build an appropriately structured argument to pass to get_posts to get media by the current author
         $argsAuthor = array(
             'post_type' => 'attachment',
-            'author' => $user_id,   
-//            'tax_query' => $taxquery 
+            'author' => $user_id, 
             'fields' => 'ids'
         );
+// using the tax query above, build an appropriately structured argument to pass to get_posts to get media by taxonomy
         $argsSiteSections = array(
             'post_type' => 'attachment',
             'tax_query' => $taxquery, 
             'fields' => 'ids'
         );
 
-        $current_user_posts = get_posts( $argsAuthor );
-	    $current_user_sitesection_posts = get_posts( $argsSiteSections );
+        $current_user_posts = get_posts( $argsAuthor );                                  // get a list of post id's for media in the Site Sections assigned to current user
+	$current_user_sitesection_posts = get_posts( $argsSiteSections );                // get a list of post id's for media authored by current user
 
-    	$query_list =array_merge($current_user_posts,$current_user_sitesection_posts);
+    	$query_list =array_merge($current_user_posts,$current_user_sitesection_posts);   // combine the two lists of post id's
 
-        if ( $query->is_admin ) {
-            $query->set( 'post__in', $query_list );
+
+// change the query to filter by the Site Sections taxonomy or authorship
+        if ( $query->is_admin ) {                                                        // check if user is logged in
+            $query->set( 'post__in', $query_list );                                      // change the query
         }
-	}
+    }
 }
 add_action( 'pre_get_posts', 'edit_filter_get_posts' );
 
@@ -524,7 +528,8 @@ function set_parent_terms_siteSections( $post_id, $post ) {
 add_action( 'save_post', 'set_parent_terms_siteSections', 100, 2 ); // hook
 
 
-/**
+/*
+ * kavon hooshiar, 9/30/17
  * Remove editing privileges from non-admins to pages that are not part of a siteSection that is also assigned to the user
  * this works in tandem with the hook into pre_get_hosts, so that page structure above a user's accessible pages
  * can be displayed in edit.php without granting them editing rights to those parent pages
