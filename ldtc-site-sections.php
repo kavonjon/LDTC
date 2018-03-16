@@ -357,7 +357,7 @@ function edit_filter_get_posts($query) {
     } else {                                                                  // do this section if the current page is upload.php
         $user_id = get_current_user_id();                                     // get current user info
         $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' );     // get Site Section terms assigned to current user
-        $assigned_term_slugs = array();                                       // make empty array to be filled with Site Section term ID's assigned to the current user
+        $assigned_term_slugs = array();                                       // make empty array to be filled with Site Section term slugs assigned to the current user
         foreach( $assigned_terms as $term ) {                                 // for each Site Section term assigned to current user...
             $assigned_term_slugs[] = $term->slug;                             // fill out this variable with their slugs
         }
@@ -408,18 +408,18 @@ add_action( 'pre_get_posts', 'edit_filter_get_posts' );
  * https://codex.wordpress.org/Plugin_API/Filter_Reference/ajax_query_attachments_args
  */
 
-add_filter( 'ajax_query_attachments_args', 'show_users_sitesection_attachments' );
+add_filter( 'ajax_query_attachments_args', 'show_users_sitesection_attachments' ); // hook
 
 function show_users_sitesection_attachments( $query ) {
 
-    if ( current_user_can('level_10') )
+    if ( current_user_can('level_10') ) // check for user capabilities (level_10 is admin) - continue if user is not an admin
         return;
 
-    $user_id = get_current_user_id();
-    $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' );
-    $assigned_term_slugs = array();
-    foreach( $assigned_terms as $term ) {
-        $assigned_term_slugs[] = $term->slug;
+    $user_id = get_current_user_id();                                 // get the id of the current user
+    $assigned_terms = wp_get_object_terms( $user_id, 'siteSection' ); // get Site Section terms assigned to current user
+    $assigned_term_slugs = array();                                   // make empty array to be filled with Site Section term slugs assigned to the current user
+    foreach( $assigned_terms as $term ) {                             // for each Site Section term assigned to current user...
+        $assigned_term_slugs[] = $term->slug;                         // fill out this variable with their slugs
     }
 
 // build an array to define the terms of Site Sections to filter the query by
@@ -433,26 +433,27 @@ function show_users_sitesection_attachments( $query ) {
         )
     );
 
+// build an array of arguments to retreive media authored by the current user
     $argsAuthor = array(
         'post_type' => 'attachment',
         'author' => $user_id,   
-//        'tax_query' => $taxquery 
         'fields' => 'ids'
     );
-	$argsSiteSections = array(
+// build an array of arguments to retreive media using the taxonomy query for site sections
+    $argsSiteSections = array(
         'post_type' => 'attachment',
         'tax_query' => $taxquery, 
         'fields' => 'ids'
     );
 
-    $current_user_posts = get_posts( $argsAuthor );
-	$current_user_sitesection_posts = get_posts( $argsSiteSections );
-	
-	$query_list =array_merge($current_user_posts,$current_user_sitesection_posts);
+    $current_user_posts = get_posts( $argsAuthor );                                // get a list of media authored by current user
+    $current_user_sitesection_posts = get_posts( $argsSiteSections );              // get a list of media that share Site Section terms with user
 
-    $query['post__in'] = $query_list;
+    $query_list =array_merge($current_user_posts,$current_user_sitesection_posts); // combine the two lists above
 
-    return $query; //  the example code in the link above.
+    $query['post__in'] = $query_list;                                              // set the query to filter for all media in the combined list above
+
+    return $query; //  the example code in the link above.                         // return the modified query as output
 }
 
 
@@ -509,20 +510,22 @@ function set_parent_terms_siteSections( $post_id, $post ) {
 
                     $languages_term = get_term_by( 'slug', 'languages', 'siteSection' );                // get the info for the languages term of Site Sections
                     $languages_term_id = $languages_term->term_id;                                      // get the ID for the languages term of Site Sections
-                    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' );    //output is ID's;  get the IDs of all children terms for the languages term
+                    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' );    // output is ID's;  get the IDs of all children terms for the languages term
 
-                    $tmp = wp_remove_object_terms( $parent_post_ID, $languages_child_terms, 'siteSection' );
+                    $tmp = wp_remove_object_terms( $parent_post_ID, $languages_child_terms, 'siteSection' ); // remove the current Site Section terms that are children of the languages term
 
                     $termArr = array_map(create_function('$obj', 'return $obj->term_id;'), $terms);
-                    $tmp = wp_set_object_terms( $post_id, $termArr, 'siteSection', true );
+                    $tmp = wp_set_object_terms( $post_id, $termArr, 'siteSection', true );                   // add back the updated list of Site Section terms for this post that are children of the language term
                 }
             }
         }
     }
-    if ( $post->post_name == 'languages') {
-        wp_set_object_terms( $post_id, 'languages', 'siteSection', true );
+// this section addresses the special case of the languages term of Site Sections, which should always and only be assigned to the language page in order for other functionality (like the auto generated page links on the Language Projects) to work
+// this section of code needs to come last to ensure this rule is always followed
+    if ( $post->post_name == 'languages') {                                // check if the currrent post is the language page
+        wp_set_object_terms( $post_id, 'languages', 'siteSection', true ); // set the languages term to that post
     } else {
-        wp_remove_object_terms( $post_id, 'languages', 'siteSection' );
+        wp_remove_object_terms( $post_id, 'languages', 'siteSection' );    // if the current post isn't the languages page, remove the languages term
     }
 }
 add_action( 'save_post', 'set_parent_terms_siteSections', 100, 2 ); // hook
@@ -541,30 +544,30 @@ add_action( 'save_post', 'set_parent_terms_siteSections', 100, 2 ); // hook
 function ldtc_user_can_edit( $user_id, $page_id ) { // this function is called by the function ldtc_restrict_editing below
 
 
-    if ( current_user_can('level_10') )    // check for user capabilities (level_10 is admin) - continue if user is not an admin
-        return TRUE;                       // if so, function's output is TRUE because the user is admin so they can edit any page
+    if ( current_user_can('level_10') )       // check for user capabilities (level_10 is admin) - continue if user is not an admin
+        return TRUE;                          // if so, function's output is TRUE because the user is admin so they can edit any page
 
-    $the_post = get_post( $page_id );      // 
-    if ( $user_id == $the_post->post_author )
-        return TRUE;
+    $the_post = get_post( $page_id );         // get the id of the current post
+    if ( $user_id == $the_post->post_author ) // check if the current user is the author of the current post
+        return TRUE;                          // end this function with the output true (user can edit)
 
-    $page_terms = wp_get_object_terms( $page_id, 'siteSection' );
-    $page_term_slugs = array();
-    foreach( $page_terms as $term ) {
-        $page_term_slugs[] = $term->slug;
+    $page_terms = wp_get_object_terms( $page_id, 'siteSection' ); // get all the site section terms associated with the post
+    $page_term_slugs = array();                                   // make empty array to be filled with Site Section term slugs assigned to the current post
+    foreach( $page_terms as $term ) {                             // for each Site Section term assigned to current post...
+        $page_term_slugs[] = $term->slug;                         // fill out this variable with their slugs
     }
 
 
-    $user = wp_get_current_user(); 
-    $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );
-    foreach( $assigned_terms as $term ) {
-        $assigned_term_slug = $term->slug;
-        if ( in_array($assigned_term_slug, $page_term_slugs) ) {
-            return TRUE;
+    $user = wp_get_current_user();                                     // get current user info
+    $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' ); // get Site Section terms assigned to current user
+    foreach( $assigned_terms as $term ) {                              // for each Site Section term assigned to current user...
+        $assigned_term_slug = $term->slug;                             // fill out this variable with their slugs
+        if ( in_array($assigned_term_slug, $page_term_slugs) ) {       // for each of these terms slugs, check if the term is assigned to both the current post and current user
+            return TRUE;                                               // if one of the terms is indeed assigned to both, stop the for loop and return true - the user can edit
         }
     }
 
-    return FALSE;
+    return FALSE;                                                      // the process has concluded without finding any reason the user is allowed to edit, so return false - not allowed to edit
 
 }
 
