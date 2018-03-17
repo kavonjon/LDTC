@@ -1,7 +1,7 @@
 <?php
    /*
    Plugin Name: LDTC Site Sections
-   Plugin URI: http://ling.hawaii.edu/ldtc
+   Plugin URI: https://github.com/kavonjon/ldtc-site-sections
    Description: creates a custom taxonomy called "Site Sections" to manage user access to 
                 different parts of the site, so that each LDTC project can be handled  
                 separately, and users can be granted to editing each separately.
@@ -575,7 +575,7 @@ add_filter( 'map_meta_cap', ldtc_restrict_editing, 10, 4 ); // hook
 
 function ldtc_restrict_editing( $caps, $cap, $user_id, $args ) {
 
-    $to_filter = [ 'edit_post', 'delete_post', 'edit_page', 'delete_page' ];
+    $to_filter = [ 'edit_post', 'delete_post', 'edit_page', 'delete_page' ];    // these are the capabilities that are to be filtered based on access
 
     // If the capability being filtered isn't of our interest, just return current value
     if ( ! in_array( $cap, $to_filter, true ) ) {
@@ -607,16 +607,17 @@ add_filter( 'quick_edit_dropdown_pages_args', 'restrict_parent_page_menu' ); // 
     
 function restrict_parent_page_menu( $args ) {  
 
-    if ( current_user_can('level_10') )
+    if ( current_user_can('level_10') ) // check for user capabilities (level_10 is admin) - continue if user is not an admin
         return $args;
 
-    $available_pages = array();
-    $user = wp_get_current_user(); 
-    $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' );
-    $assigned_term_ids = array();
-    foreach( $assigned_terms as $term ) {
-        $assigned_term_ids[] = $term->term_id;
-        $term_pages = get_posts(array(
+// the following code has 2 nested for loops. The first loop finds the terms associate with the user and the second loop finds the pages associated with each of those terms.
+    $available_pages = array();                                        // empty array to be filled with the pages that should be in the dropdown menus
+    $user = wp_get_current_user();                                     // get current user info
+    $assigned_terms = wp_get_object_terms( $user->ID, 'siteSection' ); // get Site Section terms assigned to current user
+    $assigned_term_ids = array();                                      // make empty array to be filled with Site Section term ID's assigned to the current user
+    foreach( $assigned_terms as $term ) {                              // for each Site Section term assigned to current user...
+        $assigned_term_ids[] = $term->term_id;                         // fill out this variable with their slugs
+        $term_pages = get_posts(array(                                 // and for each term, get all the pages that have that term assigned to them
             'post_type' => 'page',
             'numberposts' => -1,
             'tax_query' => array(
@@ -628,44 +629,46 @@ function restrict_parent_page_menu( $args ) {
                 )
             )
         ));
-        $term_pages_ID = array();
-        foreach( $term_pages as $term_page ) {
-            $term_pages_ID[] = $term_page->ID;
+        $term_pages_ID = array();                                       // make an empty array to be filled with page ID's for that term
+        foreach( $term_pages as $term_page ) {                          // for each page with the current Site Section term
+            $term_pages_ID[] = $term_page->ID;                          // fill out this variable with their ID's
         }
-        $available_pages = array_merge( $available_pages, $term_pages_ID ) ;
+        $available_pages = array_merge( $available_pages, $term_pages_ID ) ; // add the pages found in the current iteration of the loop to the existing list of pages that should be available in the menus
     }
 
-    $available_pages_and_parents = $available_pages;
-    $parents_of_pages = array();
-    foreach( $available_pages as $each_page ) {
-        $parent_of_each_page = intval( wp_get_post_parent_id( $each_page ) );
-        $parents_of_pages[] = $parent_of_each_page;
+// this section of code takes the constructed list of available pages and adds to it the parents of those pages
+    $available_pages_and_parents = $available_pages;                          // make a new variable to be amended for a complete list including parents
+    $parents_of_pages = array();                                              // make empty array for the parents of pages
+    foreach( $available_pages as $each_page ) {                               // for each page in the orginal list of available pages...
+        $parent_of_each_page = intval( wp_get_post_parent_id( $each_page ) ); // get the parent of that page
+        $parents_of_pages[] = $parent_of_each_page;                           // and add it to the list of parent pages
     }
 
-    $available_pages_and_parents = array_merge( $available_pages_and_parents, $parents_of_pages ) ;
+    $available_pages_and_parents = array_merge( $available_pages_and_parents, $parents_of_pages ) ; // combine the two lists of available parents and their pages
 
-    $unique_available_pages_and_parents = array_unique ( $available_pages_and_parents );
+    $unique_available_pages_and_parents = array_unique ( $available_pages_and_parents );            // remove duplicates from the list
 
+// get a list of all pages
     $all_pages = get_posts(array(
         'post_type' => 'page',
         'numberposts' => -1,
     ));
-    $all_pages_ID = NULL;
-    foreach( $all_pages as $all_page ) {
-        $all_pages_ID[] = $all_page->ID;
+    $all_pages_ID = NULL;                // make empty array for ID's of all pages
+    foreach( $all_pages as $all_page ) { // for each page...
+        $all_pages_ID[] = $all_page->ID; // fill this variable with its ID
     }
 
-    $restricted_pages = array_diff($all_pages_ID, $unique_available_pages_and_parents);
+    $restricted_pages = array_diff($all_pages_ID, $unique_available_pages_and_parents); // find the pages that are not in the list of available pages
 
-    $args['exclude'] = $restricted_pages;
+    $args['exclude'] = $restricted_pages; // add the list of the restricted pages to the args that are outputted by this function
 
-    $languages_term = get_term_by( 'slug', 'languages', 'siteSection' );
-    $languages_term_id = $languages_term->term_id;
-    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' ); //output is ID's
-    $user_terms_IDs_notin_sublang = array_diff( $assigned_term_ids, $languages_child_terms );
+    $languages_term = get_term_by( 'slug', 'languages', 'siteSection' ); // get the languages term of Site Sections
+    $languages_term_id = $languages_term->term_id;                       // get the ID of the languages term
+    $languages_child_terms = get_term_children( $languages_term_id, 'siteSection' ); //output is ID's, get the child terms of the languages term
+    $user_terms_IDs_notin_sublang = array_diff( $assigned_term_ids, $languages_child_terms ); // get the terms assigned to the user that are not children of the languages term
 
-    if ( $user_terms_IDs_notin_sublang == [] )
-        $args['show_option_none'] = FALSE;
+    if ( $user_terms_IDs_notin_sublang == [] ) // if the user only has Site Section terms that are children of the languages term (i.e. Language Project terms)...
+        $args['show_option_none'] = FALSE;     // force them to choose a parent by eliminating the option for not parent (which would put the page at the top of the heirarchy)
 
-    return $args;  
+    return $args;  // return the modified output
 } 
